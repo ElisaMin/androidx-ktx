@@ -2,6 +2,7 @@ package me.heizi.kotlinx.android.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -20,6 +21,9 @@ import kotlin.reflect.KProperty
  * 用[Named]的方式编辑Preferences
  */
 sealed class PreferencesManager {
+    companion object {
+        private const val TAG = "PreferencesManager"
+    }
     abstract var owner: LifecycleOwner?
     open fun <T:Any?> Named(key: String): Preference<T> {
         throw NotImplementedError()
@@ -35,6 +39,7 @@ sealed class PreferencesManager {
 
         override var owner: LifecycleOwner? = null
             set(value) {
+
                 value?.lifecycle?.addObserver(mapper)
                 field = value
             }
@@ -61,7 +66,9 @@ sealed class PreferencesManager {
         final override fun <T> Named(key: String): Preference<T> = PreferenceNullable(key)
         override var owner: LifecycleOwner? = null
             set(value) {
+
                 value?.lifecycle?.addObserver(INSTANT!!)
+
                 field = value
             }
 
@@ -83,9 +90,9 @@ sealed class PreferencesManager {
             fun <T> preference(key: String, default: T?=null) = GlobalPreference(key,default)
 
         }
-        class GlobalPreference <T> (private val key: String,val default:T?) {
+        class GlobalPreference <T> (private val key: String, private val default:T?) {
             operator fun getValue(thisRef: Any?, property: KProperty<*>): T {
-                return INSTANT!!.hashMap.getOrDefault(key,default) as T
+                return (INSTANT!!.hashMap[key] ?:default) as T
             }
             operator fun setValue(thisRef: Any?, property: KProperty<*>, value: Any?) {
                 INSTANT!!.updatePreference(key, value)
@@ -95,6 +102,7 @@ sealed class PreferencesManager {
         /** [Preference]实现 */
         private class PreferenceNullable<out T:Any?> (override val key:String) : Preference<T> {
             override operator fun getValue(thisRef: PreferencesManager, property: KProperty<*>): T {
+                Log.i(TAG, "getValue: ${INSTANT!!.hashMap[key]},$key")
                 return INSTANT!!.hashMap[key] as T
             }
             override operator fun setValue(thisRef: PreferencesManager, property: KProperty<*>, value: Any?) {
@@ -151,20 +159,28 @@ sealed class PreferencesManager {
 
         @OnLifecycleEvent(Lifecycle.Event.ON_CREATE)
         fun onCreate() {
+            Log.i(TAG, "onCreate: called")
             if (_hashMap==null) _hashMap = HashMap()
+            hashMap.putAll(sp.all)
             sp.registerOnSharedPreferenceChangeListener(onChange)
+        }
+        @OnLifecycleEvent(Lifecycle.Event.ON_START)
+        fun onStart() {
             hashMap.putAll(sp.all)
         }
         @OnLifecycleEvent(Lifecycle.Event.ON_RESUME)
         fun onResume() {
-            hashMap.putAll(sp.all)
+            Log.i(TAG, "onResume: ${hashMap.size}")
+
         }
         @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
         fun onStop() {
+            Log.i(TAG, "onStop: called")
             hashMap.clear()
         }
         @OnLifecycleEvent(Lifecycle.Event.ON_DESTROY)
         fun onDestroy() {
+            Log.i(TAG, "onDestroy: called")
             sp.unregisterOnSharedPreferenceChangeListener(onChange)
             _hashMap = null
         }
